@@ -6,11 +6,6 @@
   const taskPanel = document.querySelector("#area-tareas");
   const message = document.querySelector("#mensaje");
   const taskList = document.querySelector("#lista-tareas");
-  const status = document.querySelector("#estado-api");
-
-  if (!apiBase) {
-    status.textContent = "Falta configurar la URL de la API en api-config.js. Publica primero el backend y copia aquí su URL.";
-  }
 
   function showMessage(text, isError = false) {
     message.textContent = text;
@@ -18,7 +13,7 @@
   }
 
   async function api(path, options = {}, authenticated = false) {
-    if (!apiBase) throw new Error("Configura la URL de la API en api-config.js.");
+    if (!apiBase) throw new Error("El servicio todavía no está disponible.");
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
     if (authenticated) {
       const token = localStorage.getItem(tokenKey);
