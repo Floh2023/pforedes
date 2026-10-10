@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.py[cod]
+tareas.db
+cookies.txt
+.DS_Store
