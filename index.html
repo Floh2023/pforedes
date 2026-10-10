@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sistema de gestión de tareas del PFO 2">
+  <title>Gestión de tareas | PFO 2</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="api-config.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="contenedor">
+    <header class="encabezado">
+      <p class="sobrelinea">PFO 2 · API Flask + SQLite</p>
+      <h1>Mis tareas</h1>
+      <p>Registra tu cuenta o inicia sesión para organizar tus pendientes.</p>
+    </header>
+
+    <p id="estado-api" class="aviso" role="status"></p>
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite"></p>
+
+    <section id="acceso" class="panel acceso">
+      <form id="form-registro" class="formulario">
+        <h2>Crear cuenta</h2>
+        <label>Usuario<input name="usuario" required autocomplete="username"></label>
+        <label>Contraseña<input name="contraseña" type="password" required minlength="4" autocomplete="new-password"></label>
+        <button type="submit">Registrarme</button>
+      </form>
+      <form id="form-login" class="formulario">
+        <h2>Iniciar sesión</h2>
+        <label>Usuario<input name="usuario" required autocomplete="username"></label>
+        <label>Contraseña<input name="contraseña" type="password" required autocomplete="current-password"></label>
+        <button type="submit">Ingresar</button>
+      </form>
+    </section>
+
+    <section id="area-tareas" class="panel" hidden>
+      <div class="barra-usuario">
+        <p>Sesión de <strong id="nombre-usuario"></strong></p>
+        <button id="boton-salir" class="secundario" type="button">Cerrar sesión</button>
+      </div>
+      <form id="form-tarea" class="formulario tarea-nueva">
+        <h2>Nueva tarea</h2>
+        <label>Título<input name="titulo" required maxlength="160"></label>
+        <label>Descripción<textarea name="descripcion" rows="3"></textarea></label>
+        <button type="submit">Agregar tarea</button>
+      </form>
+      <h2>Listado</h2>
+      <ul id="lista-tareas" class="lista-tareas"></ul>
+    </section>
+
+    <footer>Proyecto académico · Las tareas se guardan en la base de datos de la API.</footer>
+  </main>
+</body>
+</html>

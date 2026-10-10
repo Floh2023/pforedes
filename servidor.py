@@ -8,17 +8,13 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
-from flask import Flask, g, jsonify, render_template_string, request, session
+from flask import Flask, g, jsonify, render_template, request, session
+from flask_cors import CORS
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = Path(os.environ.get("DATABASE_PATH", BASE_DIR / "tareas.db"))
-
-PAGINA_BIENVENIDA = """<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>Gestión de tareas</title></head>
-<body><h1>¡Bienvenido/a al sistema de gestión de tareas!</h1>
-<p>La API está disponible. Inicia sesión para gestionar tus tareas.</p></body></html>"""
-
 
 def conectar_db() -> sqlite3.Connection:
     """Obtiene una conexión por petición y devuelve filas como diccionarios."""
@@ -53,11 +49,22 @@ def inicializar_db() -> None:
 
 
 def requiere_login(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Protege rutas que necesitan una sesión creada mediante /login."""
+    """Protege rutas con token Bearer (web estática) o cookie (pruebas locales)."""
     @wraps(func)
     def decorada(*args: Any, **kwargs: Any) -> Any:
-        if "usuario_id" not in session:
+        usuario_id = session.get("usuario_id")
+        encabezado = request.headers.get("Authorization", "")
+        if encabezado.startswith("Bearer "):
+            try:
+                datos_token = app.extensions["token_serializer"].loads(
+                    encabezado.removeprefix("Bearer "), max_age=86400
+                )
+                usuario_id = datos_token["usuario_id"]
+            except (BadSignature, SignatureExpired, KeyError, TypeError):
+                return jsonify(error="Token inválido o vencido; inicia sesión nuevamente"), 401
+        if usuario_id is None:
             return jsonify(error="Debes iniciar sesión"), 401
+        g.usuario_id = usuario_id
         return func(*args, **kwargs)
     return decorada
 
@@ -68,6 +75,16 @@ def crear_app() -> Flask:
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "clave-local-cambiar-en-produccion")
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # GitHub Pages y el backend tienen dominios distintos: habilitamos CORS
+    # para el sitio publicado y los servidores locales habituales.
+    origenes = os.environ.get(
+        "FRONTEND_ORIGINS",
+        "https://floh2023.github.io,http://localhost:5500,http://127.0.0.1:5500",
+    )
+    CORS(app, origins=[origen.strip() for origen in origenes.split(",") if origen.strip()])
+    app.extensions["token_serializer"] = URLSafeTimedSerializer(
+        app.config["SECRET_KEY"], salt="pfo2-api-token"
+    )
 
     @app.teardown_appcontext
     def cerrar_db(_error: BaseException | None = None) -> None:
@@ -121,7 +138,10 @@ def crear_app() -> Flask:
 
         session.clear()
         session["usuario_id"] = fila["id"]
-        return jsonify(mensaje="Inicio de sesión correcto", usuario=fila["usuario"]), 200
+        token = app.extensions["token_serializer"].dumps({"usuario_id": fila["id"]})
+        return jsonify(
+            mensaje="Inicio de sesión correcto", usuario=fila["usuario"], token=token
+        ), 200
 
     @app.post("/logout")
     def logout() -> Any:
@@ -130,15 +150,15 @@ def crear_app() -> Flask:
 
     @app.get("/tareas")
     def pagina_tareas() -> str:
-        # Este endpoint sirve el HTML simple solicitado en la consigna.
-        return render_template_string(PAGINA_BIENVENIDA)
+        # Sirve el archivo HTML de bienvenida exigido por la consigna.
+        return render_template("bienvenida.html")
 
     @app.get("/api/tareas")
     @requiere_login
     def listar_tareas() -> Any:
         filas = conectar_db().execute(
             "SELECT id, titulo, descripcion, completada, creada_en FROM tareas "
-            "WHERE usuario_id = ? ORDER BY id DESC", (session["usuario_id"],)
+            "WHERE usuario_id = ? ORDER BY id DESC", (g.usuario_id,)
         ).fetchall()
         return jsonify(tareas=[dict(fila) for fila in filas])
 
@@ -154,7 +174,7 @@ def crear_app() -> Flask:
         db = conectar_db()
         cursor = db.execute(
             "INSERT INTO tareas (usuario_id, titulo, descripcion) VALUES (?, ?, ?)",
-            (session["usuario_id"], datos["titulo"].strip(), descripcion),
+            (g.usuario_id, datos["titulo"].strip(), descripcion),
         )
         db.commit()
         tarea = db.execute(

@@ -1,67 +1,75 @@
 # PFO 2: Sistema de gestión de tareas
 
-API REST desarrollada con Flask y SQLite. Incluye registro de usuarios con contraseñas hasheadas, inicio y cierre de sesión, una página HTML de bienvenida y endpoints JSON para crear y listar tareas del usuario autenticado.
+Proyecto con una API REST Flask y SQLite, más una interfaz HTML/JavaScript estática. La interfaz se puede publicar en GitHub Pages; la API Python debe ejecutarse en un servicio de backend como Render porque Pages solo publica archivos estáticos.
 
-## Requisitos
+## Estructura
 
-- Python 3.10 o superior.
-- `pip`.
+- `servidor.py`: API Flask, SQLite, registro, inicio de sesión y tareas.
+- `index.html`, `styles.css`, `app.js`: interfaz estática.
+- `api-config.js`: URL pública de la API que consume la interfaz.
+- `requirements.txt`: dependencias de Python.
 
-## Instalación y ejecución
-
-Desde la carpeta del proyecto:
+## Ejecutar localmente
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-La base `tareas.db` se crea automáticamente al iniciar el servidor; también se puede inicializar por separado:
-
-```bash
-python -c "from servidor import inicializar_db; inicializar_db()"
-```
-
-Inicia la API:
-
-```bash
 python servidor.py
 ```
 
-Por defecto escucha en `http://127.0.0.1:5000`. Se puede configurar `DATABASE_PATH`, `PORT` y `SECRET_KEY` mediante variables de entorno. Para un entorno real, define `SECRET_KEY` con un valor aleatorio y privado.
+La API escucha en `http://127.0.0.1:5000` y crea `tareas.db` automáticamente. Para ver la bienvenida del endpoint requerido, abre `http://127.0.0.1:5000/tareas`.
 
-## Probar los endpoints
+Para probar la interfaz localmente, abre otra terminal y sirve la carpeta estática, por ejemplo:
 
-### Página HTML
+```bash
+python3 -m http.server 5500
+```
 
-Abre `http://127.0.0.1:5000/tareas` en el navegador. Devuelve una página HTML simple de bienvenida.
+Abre `http://localhost:5500`. La API ya permite este origen local por CORS.
 
-### Registro
+## Publicar la API en Render
+
+1. Sube este repositorio a GitHub.
+2. En Render, crea **New → Web Service** y conecta el repositorio.
+3. Configura:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn --bind 0.0.0.0:$PORT servidor:app`
+4. En **Environment** agrega:
+   - `SECRET_KEY`: un secreto aleatorio y privado.
+   - `FRONTEND_ORIGINS`: `https://floh2023.github.io`
+5. Crea el servicio y copia la URL pública, por ejemplo `https://pfo2-api.onrender.com`.
+
+La base SQLite se crea automáticamente en el servidor. El filesystem de los servicios puede ser efímero: para conservar los datos después de reinicios o nuevos deploys, configura almacenamiento persistente y define `DATABASE_PATH` con una ruta dentro del disco persistente.
+
+## Publicar la interfaz en GitHub Pages
+
+1. Edita `api-config.js` y reemplaza la cadena vacía por la URL de Render, sin `/` al final:
+
+   ```js
+   window.API_BASE_URL = "https://pfo2-api.onrender.com";
+   ```
+
+2. Guarda y sube el cambio a GitHub (`git add api-config.js && git commit -m "Configurar URL de la API" && git push`).
+3. En el repositorio `Floh2023/pforedes`, ve a **Settings → Pages**.
+4. En **Build and deployment**, selecciona **Deploy from a branch**, rama `main` y carpeta `/(root)`, luego pulsa **Save**.
+5. Espera el deploy. La interfaz quedará en `https://floh2023.github.io/pforedes/`.
+
+El HTML de Pages llama a Render para registro, login y tareas. El login devuelve un token firmado con vencimiento de 24 horas, que la interfaz envía como `Authorization: Bearer ...`. El backend también admite las sesiones cookie para las pruebas con `curl`.
+
+## Probar la API con curl
+
+Reemplaza `http://127.0.0.1:5000` por la URL de Render para probar el servidor publicado.
 
 ```bash
 curl -i -X POST http://127.0.0.1:5000/registro \
   -H 'Content-Type: application/json' \
   -d '{"usuario":"ana","contraseña":"1234"}'
-```
 
-Si el registro es correcto, responde `201 Created`. Un nombre de usuario repetido responde `409 Conflict`. También se acepta `contrasena` sin tilde como nombre alternativo del campo.
-
-### Inicio de sesión
-
-La respuesta establece una cookie de sesión. Guarda la cookie para usar los endpoints de tareas:
-
-```bash
 curl -i -c cookies.txt -X POST http://127.0.0.1:5000/login \
   -H 'Content-Type: application/json' \
   -d '{"usuario":"ana","contraseña":"1234"}'
-```
 
-Credenciales inválidas responden `401 Unauthorized`.
-
-### Crear y listar tareas
-
-```bash
 curl -i -b cookies.txt -X POST http://127.0.0.1:5000/api/tareas \
   -H 'Content-Type: application/json' \
   -d '{"titulo":"Entregar el trabajo práctico","descripcion":"Revisar el README"}'
@@ -69,18 +77,12 @@ curl -i -b cookies.txt -X POST http://127.0.0.1:5000/api/tareas \
 curl -i -b cookies.txt http://127.0.0.1:5000/api/tareas
 ```
 
-Las tareas se asocian al usuario que inició sesión. Sin sesión, estos endpoints responden `401 Unauthorized`. Para cerrar la sesión:
-
-```bash
-curl -i -b cookies.txt -X POST http://127.0.0.1:5000/logout
-```
-
 ## Respuestas conceptuales
 
-### 1. ¿Por qué es obligatorio hashear las contraseñas?
+### ¿Por qué es obligatorio hashear las contraseñas?
 
-El hash evita almacenar la contraseña original. Si alguien accede a la base de datos, no obtiene directamente las credenciales que los usuarios podrían reutilizar en otros servicios. Al iniciar sesión, el servidor compara la contraseña ingresada con el hash usando la función de verificación; no necesita descifrar ni recuperar el texto original. En esta implementación, Werkzeug genera hashes con sal y un algoritmo adecuado para contraseñas. El hash sigue siendo un dato sensible y la aplicación también debe proteger la base y las sesiones.
+El hash evita almacenar la contraseña original. Si alguien accede a la base de datos, no obtiene directamente las credenciales que los usuarios podrían reutilizar en otros servicios. Para iniciar sesión se compara la contraseña ingresada con el hash; no se descifra ni recupera el texto original. Werkzeug genera un hash con sal y PBKDF2. El hash sigue siendo un dato sensible y también deben protegerse la base de datos y los tokens.
 
-### 2. ¿Cuáles son las ventajas de SQLite en este proyecto?
+### ¿Cuáles son las ventajas de SQLite en este proyecto?
 
-SQLite viene integrado con Python, no requiere instalar ni administrar un servidor de base de datos y guarda los datos en un archivo local. Esto simplifica la instalación, el traslado y las copias de seguridad, y resulta conveniente para trabajos prácticos, prototipos y aplicaciones pequeñas o de uso moderado. Además, permite aplicar restricciones y relaciones entre tablas, como la clave foránea que vincula cada tarea con su usuario. Si la aplicación necesitara muchas escrituras concurrentes o escalado distribuido, sería razonable migrar a un servidor de base de datos.
+SQLite viene integrado con Python, no requiere instalar ni administrar un servidor de base de datos y guarda los datos en un archivo local. Esto simplifica la instalación, el traslado y las copias de seguridad, y resulta conveniente para trabajos prácticos, prototipos y aplicaciones pequeñas. También permite definir relaciones y restricciones; aquí cada tarea está asociada a un usuario mediante una clave foránea. Si la aplicación necesitara muchas escrituras simultáneas o escalado distribuido, convendría migrar a una base de datos de servidor.
